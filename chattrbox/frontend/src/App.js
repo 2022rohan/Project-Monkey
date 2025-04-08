@@ -1,7 +1,9 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { AppBar, Toolbar, Typography, Container } from '@mui/material';
 import CssBaseline from '@mui/material/CssBaseline';
+import VideoChat from './components/VideoChat';
 
 // Create a theme instance
 const theme = createTheme({
@@ -20,9 +22,18 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        <Routes>
-          <Route path="/" element={<div>Welcome to ChattrBox</div>} />
-        </Routes>
+        <AppBar position="static">
+          <Toolbar>
+            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+              ChattrBox
+            </Typography>
+          </Toolbar>
+        </AppBar>
+        <Container>
+          <Routes>
+            <Route path="/" element={<VideoChat />} />
+          </Routes>
+        </Container>
       </Router>
     </ThemeProvider>
   );

@@ -33,11 +33,24 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/chattrbox
 .catch(err => console.error('MongoDB connection error:', err));
 
 // Socket.io connection handling
+const connectedUsers = new Set();
+
 io.on('connection', (socket) => {
-  console.log('New client connected');
+  console.log('New client connected:', socket.id);
+  connectedUsers.add(socket.id);
+
+  socket.on('join-room', (roomId) => {
+    socket.join(roomId);
+    console.log(`User ${socket.id} joined room ${roomId}`);
+  });
+
+  socket.on('signal', ({ signal, roomId, userId }) => {
+    socket.to(roomId).emit('signal', { signal, userId });
+  });
 
   socket.on('disconnect', () => {
-    console.log('Client disconnected');
+    console.log('Client disconnected:', socket.id);
+    connectedUsers.delete(socket.id);
   });
 });
 
