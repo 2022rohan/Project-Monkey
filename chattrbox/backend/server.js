@@ -8,19 +8,25 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+
+// Configure CORS for both Express and Socket.IO
+const corsOptions = {
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"]
+};
+
+app.use(cors(corsOptions));
+
 const io = socketIo(server, {
-  cors: {
-    origin: "*", // Allow all origins in development
-    methods: ["GET", "POST"]
-  }
+  cors: corsOptions,
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 // Middleware
-app.use(cors({
-  origin: "*", // Allow all origins in development
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
-}));
 app.use(express.json());
 app.use(passport.initialize());
 
@@ -98,8 +104,9 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-const HOST = '0.0.0.0'; // Listen on all network interfaces
+const HOST = '0.0.0.0';
 
 server.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
+  console.log(`Access the server from other devices using your local IP address`);
 }); 

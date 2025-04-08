@@ -3,12 +3,14 @@ import { Box, Button, Container, Typography, Paper, CircularProgress, Alert } fr
 import Peer from 'simple-peer';
 import io from 'socket.io-client';
 
-// Get the current host's IP address
-const getLocalIP = () => {
-  return window.location.hostname;
-};
+// Use the host's IP address for network access
+const SERVER_URL = 'http://192.168.1.100:5000'; // Replace with your actual IP address
 
-const socket = io(`http://${getLocalIP()}:5000`);
+const socket = io(SERVER_URL, {
+  transports: ['websocket'],
+  reconnection: true,
+  reconnectionAttempts: 5
+});
 
 const VideoChat = () => {
   const [stream, setStream] = useState(null);
@@ -18,10 +20,29 @@ const VideoChat = () => {
   const [roomId, setRoomId] = useState(null);
   const [error, setError] = useState(null);
   const [partnerLeft, setPartnerLeft] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
 
   useEffect(() => {
+    // Socket connection status
+    socket.on('connect', () => {
+      console.log('Connected to server');
+      setConnectionStatus('connected');
+      setError(null);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('Connection error:', err);
+      setError('Failed to connect to server. Please check your network connection.');
+      setConnectionStatus('error');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      setConnectionStatus('disconnected');
+    });
+
     // Get user's media stream
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
@@ -65,6 +86,9 @@ const VideoChat = () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
+      socket.off('connect');
+      socket.off('connect_error');
+      socket.off('disconnect');
       socket.off('user-joined');
       socket.off('signal');
       socket.off('partner-left');
@@ -72,6 +96,10 @@ const VideoChat = () => {
   }, [peer, stream]);
 
   const startCall = () => {
+    if (connectionStatus !== 'connected') {
+      setError('Not connected to server. Please check your network connection.');
+      return;
+    }
     setIsWaiting(true);
     setError(null);
     setPartnerLeft(false);
@@ -132,6 +160,12 @@ const VideoChat = () => {
           </Alert>
         )}
 
+        {connectionStatus === 'error' && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Server connection error. Please check your network and try again.
+          </Alert>
+        )}
+
         {partnerLeft && (
           <Alert severity="info" sx={{ mb: 2 }}>
             Your partner has left the chat.
@@ -166,6 +200,7 @@ const VideoChat = () => {
               color="primary"
               onClick={startCall}
               size="large"
+              disabled={connectionStatus !== 'connected'}
             >
               Start Random Chat
             </Button>
