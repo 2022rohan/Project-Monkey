@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Button, Container, Typography, Paper, CircularProgress } from '@mui/material';
+import { Box, Button, Container, Typography, Paper, CircularProgress, Alert } from '@mui/material';
 import Peer from 'simple-peer';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:5000');
+// Get the current host's IP address
+const getLocalIP = () => {
+  return window.location.hostname;
+};
+
+const socket = io(`http://${getLocalIP()}:5000`);
 
 const VideoChat = () => {
   const [stream, setStream] = useState(null);
@@ -11,6 +16,8 @@ const VideoChat = () => {
   const [isWaiting, setIsWaiting] = useState(false);
   const [peer, setPeer] = useState(null);
   const [roomId, setRoomId] = useState(null);
+  const [error, setError] = useState(null);
+  const [partnerLeft, setPartnerLeft] = useState(false);
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
 
@@ -23,18 +30,34 @@ const VideoChat = () => {
           localVideoRef.current.srcObject = stream;
         }
       })
-      .catch(err => console.error('Error accessing media devices:', err));
+      .catch(err => {
+        console.error('Error accessing media devices:', err);
+        setError('Please allow camera and microphone access to use the video chat.');
+      });
 
     // Socket event handlers
     socket.on('user-joined', ({ roomId: newRoomId }) => {
       setRoomId(newRoomId);
       setIsWaiting(false);
       setIsCalling(true);
+      setPartnerLeft(false);
     });
 
     socket.on('signal', ({ signal, userId }) => {
       if (peer) {
         peer.signal(signal);
+      }
+    });
+
+    socket.on('partner-left', () => {
+      setPartnerLeft(true);
+      setIsCalling(false);
+      if (peer) {
+        peer.destroy();
+        setPeer(null);
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
       }
     });
 
@@ -44,11 +67,14 @@ const VideoChat = () => {
       }
       socket.off('user-joined');
       socket.off('signal');
+      socket.off('partner-left');
     };
   }, [peer, stream]);
 
   const startCall = () => {
     setIsWaiting(true);
+    setError(null);
+    setPartnerLeft(false);
     socket.emit('find-partner');
   };
 
@@ -59,7 +85,7 @@ const VideoChat = () => {
     }
     setIsCalling(false);
     setIsWaiting(false);
-    setRoomId(null);
+    setPartnerLeft(false);
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
     }
@@ -84,6 +110,11 @@ const VideoChat = () => {
         }
       });
 
+      newPeer.on('error', err => {
+        console.error('Peer error:', err);
+        setError('Connection error occurred. Please try again.');
+      });
+
       setPeer(newPeer);
     }
   }, [roomId, stream]);
@@ -94,6 +125,18 @@ const VideoChat = () => {
         <Typography variant="h4" gutterBottom align="center">
           Video Chat
         </Typography>
+        
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        {partnerLeft && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Your partner has left the chat.
+          </Alert>
+        )}
         
         <Box sx={{ display: 'flex', justifyContent: 'space-around', mt: 4 }}>
           <Box sx={{ width: '45%' }}>

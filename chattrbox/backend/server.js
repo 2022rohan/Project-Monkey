@@ -32,25 +32,63 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/chattrbox
 .then(() => console.log('Connected to MongoDB'))
 .catch(err => console.error('MongoDB connection error:', err));
 
-// Socket.io connection handling
-const connectedUsers = new Set();
+// Room management
+const waitingUsers = new Set();
+const activeRooms = new Map();
 
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
-  connectedUsers.add(socket.id);
 
-  socket.on('join-room', (roomId) => {
-    socket.join(roomId);
-    console.log(`User ${socket.id} joined room ${roomId}`);
+  socket.on('find-partner', () => {
+    if (waitingUsers.size > 0) {
+      // Get the first waiting user
+      const partnerId = Array.from(waitingUsers)[0];
+      waitingUsers.delete(partnerId);
+      
+      // Create a new room
+      const roomId = `room_${socket.id}_${partnerId}`;
+      activeRooms.set(roomId, [socket.id, partnerId]);
+      
+      // Join both users to the room
+      socket.join(roomId);
+      io.to(partnerId).emit('user-joined', { roomId });
+      socket.emit('user-joined', { roomId });
+      
+      console.log(`Created room ${roomId} with users ${socket.id} and ${partnerId}`);
+    } else {
+      // Add to waiting list
+      waitingUsers.add(socket.id);
+      console.log(`User ${socket.id} added to waiting list`);
+    }
   });
 
   socket.on('signal', ({ signal, roomId, userId }) => {
     socket.to(roomId).emit('signal', { signal, userId });
   });
 
+  socket.on('leave-room', (roomId) => {
+    if (activeRooms.has(roomId)) {
+      const [user1, user2] = activeRooms.get(roomId);
+      io.to(user1).emit('partner-left');
+      io.to(user2).emit('partner-left');
+      activeRooms.delete(roomId);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
-    connectedUsers.delete(socket.id);
+    waitingUsers.delete(socket.id);
+    
+    // Find and clean up any rooms this user was in
+    for (const [roomId, users] of activeRooms.entries()) {
+      if (users.includes(socket.id)) {
+        const partnerId = users.find(id => id !== socket.id);
+        if (partnerId) {
+          io.to(partnerId).emit('partner-left');
+        }
+        activeRooms.delete(roomId);
+      }
+    }
   });
 });
 
